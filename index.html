@@ -332,6 +332,20 @@ function setSync(){
     });
   }
 })();
+(function(){
+  try{
+    var q=new URLSearchParams(location.search);
+    var o=q.get('owner'),r=q.get('repo');
+    if(!o&&!r)return;
+    var g=function(id){return document.getElementById(id);};
+    if(o)g('cOwner').value=o;
+    if(r)g('cRepo').value=r;
+    if(q.get('path'))g('cPath').value=q.get('path');
+    if(q.get('branch'))g('cBranch').value=q.get('branch');
+    var cc=g('cloudCard');
+    if(cc)cc.hidden=false;
+  }catch(e){}
+})();
 function pushSoon(){ clearTimeout(pushTimer); pushTimer=setTimeout(()=>pushNow(),600); }
 function adopt(j){ store=j;
   if(!store.reports)store.reports=[]; if(!store.weeks)store.weeks={};
