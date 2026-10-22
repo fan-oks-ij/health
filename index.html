@@ -321,6 +321,17 @@ function setSync(){
   const cc=document.getElementById('cloudCard');
   if(cc)cc.hidden=!!(c&&netOK);
 }
+(function(){
+  var ss=document.getElementById('syncStat');
+  if(ss){
+    ss.style.cursor='pointer';
+    ss.title='点按展开/收起云同步设置';
+    ss.addEventListener('click',function(){
+      var cc=document.getElementById('cloudCard');
+      if(cc)cc.hidden=!cc.hidden;
+    });
+  }
+})();
 function pushSoon(){ clearTimeout(pushTimer); pushTimer=setTimeout(()=>pushNow(),600); }
 function adopt(j){ store=j;
   if(!store.reports)store.reports=[]; if(!store.weeks)store.weeks={};
