@@ -313,7 +313,7 @@ function setSync(){
     s=`· Gitee 接口限流中，约 ${Math.ceil((rateLimitedUntil-Date.now())/60000)} 分钟后自动恢复（这期间的改动都安全存在本机）`;
   else if(!netOK)s='· 离线中：改动先存本机，网络恢复后自动续传';
   else s=`· 同步：${mode}${c?` [${c.owner}/${c.repo}]`:''} · ${lastSyncAt?('最近对齐 '+lastSyncAt):'等待首次同步'}`;
-  el.textContent=s;
+  el.textContent=s+' ⚙ 同步设置';
   const cs=document.getElementById('cloudStat');
   if(cs)cs.textContent=c
     ?`已启用：${c.owner}/${c.repo} · ${netOK?'连接正常':'暂离线'}`
@@ -325,6 +325,9 @@ function setSync(){
   var ss=document.getElementById('syncStat');
   if(ss){
     ss.style.cursor='pointer';
+    ss.style.color='#6db3ff';
+    ss.style.textDecoration='underline';
+    ss.style.marginTop='6px';
     ss.title='点按展开/收起云同步设置';
     ss.addEventListener('click',function(){
       var cc=document.getElementById('cloudCard');
