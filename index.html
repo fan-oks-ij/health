@@ -305,6 +305,7 @@ const b64d=s=>decodeURIComponent(escape(atob(s)));
 function giteeUrl(c){ return 'https://gitee.com/api/v5/repos/'+encodeURIComponent(c.owner)+'/'+
   encodeURIComponent(c.repo)+'/contents/'+encodeURIComponent(c.path||'健康打卡数据.json'); }
 function nowHM(){ return new Date().toTimeString().slice(0,5); }
+var cloudManual=false;
 function setSync(){
   const el=document.getElementById('syncStat'), c=cloudCfg();
   const mode=c?'云端 Gitee（任何网络可用）':(SERVED?'局域网服务':'本机服务 localhost:8807');
@@ -319,7 +320,10 @@ function setSync(){
     ?`已启用：${c.owner}/${c.repo} · ${netOK?'连接正常':'暂离线'}`
     :'未启用 · 配置后手机流量、任何 WiFi 都能同步（数据存你自己的 Gitee 私有仓库）';
   const cc=document.getElementById('cloudCard');
-  if(cc)cc.hidden=!!(c&&netOK);
+  if(cc){
+    if(!c||!netOK){ cloudManual=false; cc.hidden=false; }
+    else cc.hidden=cloudManual;
+  }
 }
 (function(){
   var ss=document.getElementById('syncStat');
@@ -331,7 +335,7 @@ function setSync(){
     ss.title='点按展开/收起云同步设置';
     ss.addEventListener('click',function(){
       var cc=document.getElementById('cloudCard');
-      if(cc)cc.hidden=!cc.hidden;
+      if(cc){ cc.hidden=!cc.hidden; cloudManual=cc.hidden; }
     });
   }
 })();
