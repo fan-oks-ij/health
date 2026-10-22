@@ -349,6 +349,12 @@ function setSync(){
     if(r)g('cRepo').value=r;
     if(q.get('path'))g('cPath').value=q.get('path');
     if(q.get('branch'))g('cBranch').value=q.get('branch');
+    var cur=cloudCfg()||{};
+    if(cur.token)g('cToken').value=cur.token;
+    cur.owner=o||cur.owner; cur.repo=r||cur.repo;
+    cur.path=q.get('path')||''; cur.branch=q.get('branch')||'';
+    if(g('cToken').value)cur.token=g('cToken').value.trim();
+    saveCloudCfg(cur);
     var cc=g('cloudCard');
     if(cc)cc.hidden=false;
   }catch(e){}
@@ -452,6 +458,7 @@ async function saveCloudCfgStart(){
     branch:document.getElementById('cBranch').value.trim()||'master',
     token:document.getElementById('cToken').value.trim()};
   if(!c.owner||!c.repo||!c.token){ toast('Gitee 用户名、仓库名、令牌都要填'); return; }
+  if(/[^\x00-\x7F]/.test(c.owner)||/[^\x00-\x7F]/.test(c.repo)){ toast('用户名/仓库名要填网址里的英文（如 fan-jianguang），不能用中文显示名'); netOK=false; setSync(); return; }
   saveCloudCfg(c); toast('测试连接中…'); setSync();
   try{ await giteePull(c); netOK=true; lastSyncAt=nowHM(); setSync();
     toast('云同步已启用 ✓ 数据已对齐'); }
