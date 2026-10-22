@@ -215,7 +215,7 @@ details.hist .hd .revline { padding:3px 0; font-size:13px; }
     <div id="historyList"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="cloudCard" hidden>
     <h2>☁️ 云同步（Gitee 私有仓库）</h2>
     <div class="sub" id="cloudStat"></div>
     <div class="fld"><input id="cOwner" placeholder="Gitee 用户名"><input id="cRepo" placeholder="私有仓库名（如 health-checkin）"></div>
@@ -312,12 +312,14 @@ function setSync(){
   if(Date.now()<rateLimitedUntil)
     s=`· Gitee 接口限流中，约 ${Math.ceil((rateLimitedUntil-Date.now())/60000)} 分钟后自动恢复（这期间的改动都安全存在本机）`;
   else if(!netOK)s='· 离线中：改动先存本机，网络恢复后自动续传';
-  else s=`· 同步：${mode} · ${lastSyncAt?('最近对齐 '+lastSyncAt):'等待首次同步'}`;
+  else s=`· 同步：${mode}${c?` [${c.owner}/${c.repo}]`:''} · ${lastSyncAt?('最近对齐 '+lastSyncAt):'等待首次同步'}`;
   el.textContent=s;
   const cs=document.getElementById('cloudStat');
   if(cs)cs.textContent=c
     ?`已启用：${c.owner}/${c.repo} · ${netOK?'连接正常':'暂离线'}`
     :'未启用 · 配置后手机流量、任何 WiFi 都能同步（数据存你自己的 Gitee 私有仓库）';
+  const cc=document.getElementById('cloudCard');
+  if(cc)cc.hidden=!!(c&&netOK);
 }
 function pushSoon(){ clearTimeout(pushTimer); pushTimer=setTimeout(()=>pushNow(),600); }
 function adopt(j){ store=j;
