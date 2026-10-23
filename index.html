@@ -299,7 +299,7 @@ const API=SERVED?'':'http://localhost:8807';
 const CKEY='healthCheckin.cloud';
 function cloudCfg(){ try{ return JSON.parse(localStorage.getItem(CKEY))||null; }catch(e){ return null; } }
 function saveCloudCfg(c){ if(c)localStorage.setItem(CKEY,JSON.stringify(c)); else localStorage.removeItem(CKEY); }
-let netOK=true, pushTimer=null, giteeSha=null, lastSyncAt='', lastPoll=0, rateLimitedUntil=0;
+let netOK=true, pushTimer=null, giteeSha=null, lastSyncAt='', lastPoll=0, rateLimitedUntil=0, lastErr='';
 const b64e=s=>btoa(unescape(encodeURIComponent(s)));
 const b64d=s=>decodeURIComponent(escape(atob(s)));
 function giteeUrl(c){ return 'https://gitee.com/api/v5/repos/'+encodeURIComponent(c.owner)+'/'+
@@ -312,7 +312,7 @@ function setSync(){
   let s;
   if(Date.now()<rateLimitedUntil)
     s=`· Gitee 接口限流中，约 ${Math.ceil((rateLimitedUntil-Date.now())/60000)} 分钟后自动恢复（这期间的改动都安全存在本机）`;
-  else if(!netOK)s='· 离线中：改动先存本机，网络恢复后自动续传';
+  else if(!netOK)s='· 云端连接失败'+(c&&lastErr?('：'+lastErr):'')+' → 点这条蓝字检查同步设置';
   else s=`· 同步：${mode}${c?` [${c.owner}/${c.repo}]`:''} · ${lastSyncAt?('最近对齐 '+lastSyncAt):'等待首次同步'}`;
   el.textContent=s+' ⚙ 同步设置';
   const cs=document.getElementById('cloudStat');
@@ -372,8 +372,8 @@ async function pushNow(){
   try{
     if(c)await giteePut(c);
     else await fetch(API+'/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(store)});
-    netOK=true; lastSyncAt=nowHM();
-  }catch(e){ netOK=false; }
+    netOK=true; lastSyncAt=nowHM(); lastErr='';
+  }catch(e){ netOK=false; lastErr=e.message||'网络不通'; }
   setSync(); }
 async function giteePut(c){
   const url=giteeUrl(c), ref=encodeURIComponent(c.branch||'master');
@@ -381,6 +381,8 @@ async function giteePut(c){
     message:'打卡数据更新', branch:c.branch||'master'};
   if(giteeSha)body.sha=giteeSha;
   let r=await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok&&!body.sha){ /* Gitee 新建文件只认 POST，PUT 仅用于更新 */
+    r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({access_token:c.token,content:body.content,message:body.message,branch:c.branch||'master'})}); }
   if((r.status===400||r.status===409)&&body.sha){ /* sha 过期：重新取一次再推 */
     const q=await fetch(url+'?access_token='+encodeURIComponent(c.token)+'&ref='+ref,{cache:'no-store'});
     if(q.ok){ const j=await q.json(); giteeSha=j.sha; body.sha=j.sha;
@@ -388,14 +390,15 @@ async function giteePut(c){
     else if(q.status===404){ giteeSha=null; delete body.sha;
       r=await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); }
   }
-  if(!r.ok)throw new Error('Gitee PUT '+r.status);
+  if(!r.ok)throw new Error('推送失败 '+r.status+(r.status===404?'：仓库名/分支/文件名可能不对':'')+(r.status===401?'：令牌无效或过期':'')+(r.status===403?'：令牌权限不足或限流':''));
   const j=await r.json(); if(j.content&&j.content.sha)giteeSha=j.content.sha; }
 async function giteePull(c){
   const url=giteeUrl(c)+'?access_token='+encodeURIComponent(c.token)+
     '&ref='+encodeURIComponent(c.branch||'master');
   const r=await fetch(url,{cache:'no-store'});
   if(r.status===404){ giteeSha=null; if(Object.keys(store.days).length)await pushNow(); return; }
-  if(r.status===401)throw new Error('令牌无效或过期');
+  if(r.status===401)throw new Error('令牌无效或过期（401）');
+  if(r.status===403)throw new Error('令牌权限不足（建令牌要勾 projects）或接口限流（403）');
   if(!r.ok)throw new Error('Gitee '+r.status);
   const j=await r.json(); giteeSha=j.sha;
   let remote=null; try{ remote=JSON.parse(b64d((j.content||'').replace(/\s/g,''))); }catch(e){}
@@ -414,9 +417,9 @@ async function pull(){
         else if((j._ts||0)>=(store._ts||0))adopt(j);
         else await pushNow(); }
     }
-    netOK=true; lastSyncAt=nowHM();
-  }catch(e){ netOK=false;
-    if(/40[33]|429/.test(String(e&&e.message)))rateLimitedUntil=Date.now()+5*60*1000; }
+    netOK=true; lastSyncAt=nowHM(); lastErr='';
+  }catch(e){ netOK=false; lastErr=e.message||'网络不通';
+    if(/429/.test(String(e&&e.message)))rateLimitedUntil=Date.now()+5*60*1000; }
   setSync(); render();
   if(!c)fetch(API+'/api/info').then(r=>r.json()).then(i=>{
     const el=document.getElementById('phoneTip');
@@ -434,10 +437,10 @@ async function poll(){
     else{ const r=await fetch(API+'/api/data',{cache:'no-store'});
       if(r.ok){ const j=await r.json();
         if(j&&j.days&&(j._ts||0)>(store._ts||0))adopt(j); } }
-    netOK=true; lastSyncAt=nowHM();
+    netOK=true; lastSyncAt=nowHM(); lastErr='';
   }catch(e){
-    netOK=false;
-    if(/40[33]|429/.test(String(e&&e.message)))rateLimitedUntil=Date.now()+5*60*1000;
+    netOK=false; lastErr=e.message||'网络不通';
+    if(/429/.test(String(e&&e.message)))rateLimitedUntil=Date.now()+5*60*1000;
   }
   setSync();
 }
@@ -457,12 +460,15 @@ async function saveCloudCfgStart(){
     path:document.getElementById('cPath').value.trim()||'健康打卡数据.json',
     branch:document.getElementById('cBranch').value.trim()||'master',
     token:document.getElementById('cToken').value.trim()};
+  const rawPath=c.path; c.path=c.path.replace(/。/g,'.').replace(/．/g,'.').replace(/／/g,'/').trim().replace(/^\/+/,'');
+  if(c.path!==rawPath)toast('数据文件名已自动纠正为：'+c.path);
   if(!c.owner||!c.repo||!c.token){ toast('Gitee 用户名、仓库名、令牌都要填'); return; }
   if(/[^\x00-\x7F]/.test(c.owner)||/[^\x00-\x7F]/.test(c.repo)){ toast('用户名/仓库名要填网址里的英文（如 fan-jianguang），不能用中文显示名'); netOK=false; setSync(); return; }
+  if(/[^\x21-\x7E]/.test(c.token)){ toast('令牌里混入了空格或全角字符——回 Gitee 重新复制一整串（不能带空格/换行）'); return; }
   saveCloudCfg(c); toast('测试连接中…'); setSync();
-  try{ await giteePull(c); netOK=true; lastSyncAt=nowHM(); setSync();
+  try{ await giteePull(c); netOK=true; lastSyncAt=nowHM(); lastErr=''; setSync();
     toast('云同步已启用 ✓ 数据已对齐'); }
-  catch(e){ netOK=false; setSync(); toast('连接失败：'+e.message+'（检查令牌/用户名/仓库名）'); }
+  catch(e){ netOK=false; lastErr=e.message; setSync(); toast('连接失败：'+e.message+'（检查令牌/用户名/仓库名）'); }
 }
 function stopCloudCfg(){ saveCloudCfg(null); giteeSha=null; toast('已停用云端，回到局域网同步'); pull(); }
 
