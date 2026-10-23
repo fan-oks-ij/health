@@ -274,8 +274,8 @@ function diffDays(a,b){return Math.round((parseD(b)-parseD(a))/864e5);}
 function wdCN(s){return '日一二三四五六'[parseD(s).getDay()];}
 function autoShift(s){return SEQ[(((diffDays(fmt(new Date(ANCHOR[0],ANCHOR[1]-1,ANCHOR[2])),s))%4)+4)%4];}
 function mondayOf(s){return addDays(s,-((parseD(s).getDay()+6)%7));}
-function mostRecent(type){ const t=todayStr();
-  for(let i=0;i<4;i++){ const d=addDays(t,-i); if(autoShift(d)===type) return d; } return t; }
+function nextShift(type){ const t=todayStr();
+  for(let i=0;i<4;i++){ const d=addDays(t,i); if(autoShift(d)===type) return d; } return t; }
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg;
   t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2400); }
@@ -495,9 +495,9 @@ const SHIFT_ITEMS={
 };
 const SHIFT_NAME={'白':'☀️ 白班','夜':'🌙 夜班','下':'🛌 下夜班','休':'🏠 休班'};
 const WEEKLY=[
- {id:'core',    ico:'🏋️', name:'核心训练', note:'小燕飞/臀桥/平板', target:3},
- {id:'strength',ico:'💪', name:'负重运动', note:'哑铃/深蹲/引体', target:2},
- {id:'pingpong',ico:'🏓', name:'乒乓球局', note:'运动+社交二合一', target:1},
+ {id:'core',    ico:'🏋️', name:'核心训练', note:'小燕飞/臀桥/平板', target:5},
+ {id:'strength',ico:'💪', name:'负重运动', note:'哑铃/深蹲/引体', target:5},
+ {id:'pingpong',ico:'🏓', name:'乒乓球局', note:'运动+社交二合一', target:5},
 ];
 const REMINDERS=[
  {name:'🦷 洗牙（口腔科）',                 due:'2026-11-30', win:45, note:'每年 1 次'},
@@ -536,9 +536,9 @@ function render(){
       `<button class="chip ${isAuto?'on':''}" onclick="clearShift()">↩ 自动识别</button>`;
     fr.classList.remove('hidden');
   } else fr.classList.add('hidden');
-  /* 四天循环视图：点哪个班次就跳到最近的那一天，各天记录互相独立 */
+  /* 四天循环视图：点哪个班次就跳到往后最近的那一天（今天的班次显示「今天」），各天记录互相独立 */
   document.getElementById('cycleTabs').innerHTML=['白','夜','下','休'].map(k=>{
-    const d=mostRecent(k);
+    const d=nextShift(k);
     return `<button class="ctab ${sel===d?'on':''}" onclick="sel='${d}';render()">
       ${SHIFT_NAME[k]}<small>${d.slice(5)}${d===t?' · 今天':''}</small></button>`;
   }).join('');
@@ -733,7 +733,12 @@ function buildSummaryData(){
   const per={}; let totalA=0,totalD=0,untracked=0; const noteLog=[];
   days.forEach(d=>{
     const dd=store.days[d];
-    if(!dd||Object.keys(dd.items).length===0){untracked++;return;}
+    if(!dd||Object.keys(dd.items).length===0){untracked++;
+      /* 没记录的天也计入分母：没打卡 = 当天全部事项未完成，否则完成率会虚高 */
+      itemsFor(shiftOf(d)).forEach(it=>{
+        const q=per[it.id]||(per[it.id]={id:it.id,name:it.name,unit:it.unit||'次',app:0,done:0,miss:0,notes:[]});
+        q.app++; q.miss++; totalA++; });
+      return; }
     itemsFor(shiftOf(d)).forEach(it=>{
       const p=per[it.id]||(per[it.id]={id:it.id,name:it.name,unit:it.unit||'次',app:0,done:0,miss:0,notes:[]});
       p.app++; totalA++;
