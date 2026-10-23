@@ -1,5 +1,5 @@
 /* 健康打卡 Service Worker：网络优先，断网时用缓存壳 */
-const C='hc-shell-v2';
+const C='hc-shell-v3';
 self.addEventListener('install',e=>{
   self.skipWaiting();
   e.waitUntil(caches.open(C).then(c=>c.addAll(['./','./manifest.webmanifest'])));
