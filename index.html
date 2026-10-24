@@ -309,11 +309,14 @@ var cloudManual=false;
 function setSync(){
   const el=document.getElementById('syncStat'), c=cloudCfg();
   const mode=c?'云端 Gitee（任何网络可用）':(SERVED?'局域网服务':'本机服务 localhost:8807');
-  let s;
-  if(Date.now()<rateLimitedUntil)
-    s=`· Gitee 接口限流中，约 ${Math.ceil((rateLimitedUntil-Date.now())/60000)} 分钟后自动恢复（这期间的改动都安全存在本机）`;
-  else if(!netOK)s='· 云端连接失败'+(c&&lastErr?('：'+lastErr):'')+' → 点这条蓝字检查同步设置';
+  let s, trouble=false;
+  if(Date.now()<rateLimitedUntil){ trouble=true;
+    s=`· Gitee 接口限流中，约 ${Math.ceil((rateLimitedUntil-Date.now())/60000)} 分钟后自动恢复（这期间的改动都安全存在本机）`; }
+  else if(!netOK){ trouble=true;
+    s='· 云端连接失败'+(c&&lastErr?('：'+lastErr):'')+' → 点这条蓝字检查同步设置'; }
   else s=`· 同步：${mode}${c?` [${c.owner}/${c.repo}]`:''} · ${lastSyncAt?('最近对齐 '+lastSyncAt):'等待首次同步'}`;
+  if(!c)trouble=true; /* 没配置过云同步也算"有事"，行要出现 */
+  el.hidden=!trouble; /* 一切正常时整行隐藏；限流/连不上/未配置才自动弹出（点行进同步设置） */
   el.textContent=s+' ⚙ 同步设置';
   const cs=document.getElementById('cloudStat');
   if(cs)cs.textContent=c
@@ -525,7 +528,7 @@ function render(){
   const t=todayStr();
   const over=(store.days[t]&&store.days[t].shift)?'手动指定':'自动识别';
   document.getElementById('dateLine').innerHTML=
-    t+' 周'+wdCN(t)+' · 班次'+over+' · <span class="fixlink" onclick="toggleFix()">班次不对？修正</span>';
+    t+' 周'+wdCN(t)+' · <span class="fixlink" style="text-decoration:none" title="班次不对？点这里修正" onclick="toggleFix()">班次'+over+'</span>';
   /* 修正行 */
   const fr=document.getElementById('shiftChips');
   if(fixMode){
