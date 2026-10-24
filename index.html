@@ -305,7 +305,7 @@ const b64d=s=>decodeURIComponent(escape(atob(s)));
 function giteeUrl(c){ return 'https://gitee.com/api/v5/repos/'+encodeURIComponent(c.owner)+'/'+
   encodeURIComponent(c.repo)+'/contents/'+encodeURIComponent(c.path||'健康打卡数据.json'); }
 function nowHM(){ return new Date().toTimeString().slice(0,5); }
-var cloudManual=false;
+var cloudManual=false, cloudPinned=false; /* cloudPinned：诊断页 ?owner= 带参跳转进来时，这一轮保持卡片展开 */
 function setSync(){
   const el=document.getElementById('syncStat'), c=cloudCfg();
   const mode=c?'云端 Gitee（任何网络可用）':(SERVED?'局域网服务':'本机服务 localhost:8807');
@@ -324,8 +324,8 @@ function setSync(){
     :'未启用 · 配置后手机流量、任何 WiFi 都能同步（数据存你自己的 Gitee 私有仓库）';
   const cc=document.getElementById('cloudCard');
   if(cc){
-    if(!c||!netOK){ cloudManual=false; cc.hidden=false; }
-    else cc.hidden=cloudManual;
+    if(!c||!netOK){ cloudManual=false; cc.hidden=false; } /* 出事：自动展开 */
+    else cc.hidden=!cloudPinned;                          /* 正常：整卡收起（诊断页带参进来时保持展开） */
   }
 }
 (function(){
@@ -358,6 +358,7 @@ function setSync(){
     cur.path=q.get('path')||''; cur.branch=q.get('branch')||'';
     if(g('cToken').value)cur.token=g('cToken').value.trim();
     saveCloudCfg(cur);
+    cloudPinned=true;
     var cc=g('cloudCard');
     if(cc)cc.hidden=false;
   }catch(e){}
