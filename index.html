@@ -274,8 +274,8 @@ function diffDays(a,b){return Math.round((parseD(b)-parseD(a))/864e5);}
 function wdCN(s){return '日一二三四五六'[parseD(s).getDay()];}
 function autoShift(s){return SEQ[(((diffDays(fmt(new Date(ANCHOR[0],ANCHOR[1]-1,ANCHOR[2])),s))%4)+4)%4];}
 function mondayOf(s){return addDays(s,-((parseD(s).getDay()+6)%7));}
-function nextShift(type){ const t=todayStr();
-  for(let i=0;i<4;i++){ const d=addDays(t,i); if(autoShift(d)===type) return d; } return t; }
+function cycleDay(type){ const t=todayStr();
+  return addDays(t, SEQ.indexOf(type)-SEQ.indexOf(autoShift(t))); }
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg;
   t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2400); }
@@ -536,10 +536,11 @@ function render(){
       `<button class="chip ${isAuto?'on':''}" onclick="clearShift()">↩ 自动识别</button>`;
     fr.classList.remove('hidden');
   } else fr.classList.add('hidden');
-  /* 四天循环视图：点哪个班次就跳到往后最近的那一天（今天的班次显示「今天」），各天记录互相独立 */
+  /* 四天循环视图：四个标签显示本轮班次的四天（今天在第几天，窗口就框在那一轮），白班可能是前一天；各天记录互相独立。
+     蓝色高亮钉在"今天"那张卡：今天下夜班就蓝下夜班，明天轮到休班就蓝休班；点卡片仍可切到那天补打卡（蓝标不跟选区走） */
   document.getElementById('cycleTabs').innerHTML=['白','夜','下','休'].map(k=>{
-    const d=nextShift(k);
-    return `<button class="ctab ${sel===d?'on':''}" onclick="sel='${d}';render()">
+    const d=cycleDay(k);
+    return `<button class="ctab ${d===t?'on':''}" onclick="sel='${d}';render()">
       ${SHIFT_NAME[k]}<small>${d.slice(5)}${d===t?' · 今天':''}</small></button>`;
   }).join('');
   const eb=document.getElementById('editBanner');
