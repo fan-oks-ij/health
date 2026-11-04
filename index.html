@@ -503,7 +503,14 @@ const WEEKLY=[
  {id:'strength',ico:'💪', name:'负重运动', note:'哑铃/深蹲/引体', target:5},
  {id:'pingpong',ico:'🏓', name:'乒乓球局', note:'运动+社交二合一', target:5},
 ];
+/* 疗程打卡：带起止日期，窗口内自动出现在每天清单、到期自动消失（2026-11 鼻窦炎疗程，详见 健康管理档案.md 就医记录） */
+const TREATMENT=[
+ {id:'rxRox',  ico:'💊', name:'罗红霉素',     note:'疗程第4天起 · 至11-14吃满14天停', start:'2026-11-04', end:'2026-11-14', unit:'次'},
+ {id:'nsRinse',ico:'🚿', name:'盐水洗鼻',     note:'早晚各1次 · 先洗后喷',            start:'2026-11-04', end:'2026-11-17', unit:'次'},
+ {id:'bude',   ico:'🌫️', name:'布地奈德喷鼻', note:'早/晚各1喷 · 朝外侧鼻孔壁',       start:'2026-11-04', end:'2026-11-17', unit:'次'},
+];
 const REMINDERS=[
+ {name:'🤧 鼻炎疗程复盘（罗红霉素+洗鼻+布地奈德）', due:'2026-11-18', win:3, note:'抗生素吃满疗程即停；评估是否好转、要不要再开一轮洗鼻/喷剂'},
  {name:'🦷 洗牙（口腔科）',                 due:'2026-11-30', win:45, note:'每年 1 次'},
  {name:'🧪 胃蛋白酶原 + 胃泌素-17 复查',    due:'2027-01-15', win:45, note:'3~6 个月复查'},
  {name:'🫁 肺部低剂量 CT',                  due:'2027-05-01', win:60, note:'6~12 个月，以呼吸科为准'},
@@ -520,10 +527,16 @@ const TIPS={
  sun:'上午 10-11 点光线好又不太晒，顺路买菜取快递', nophone:'手机不进卧室，躺床只看纸质书',
  core:'每次 3 组×15 分钟就够，跟着视频做降低门槛', strength:'休班日下午 30 分钟，和球局错开',
  pingpong:'提前一天在群里约局，定了就不放鸽子',
+ rxRox:'固定时间空腹服吸收更好，胃不舒服改饭后；吃满14天就停，别自行延长', nsRinse:'先洗鼻后喷药，水温接近体温，早晚各一次',
+ bude:'喷嘴朝外侧鼻孔壁，别对着鼻中隔；喷完轻吸气别猛吸',
 };
 
 /* ============ 渲染 ============ */
-function itemsFor(sh){ return UNIVERSAL.concat(SHIFT_ITEMS[sh]); }
+function itemsFor(sh, day){
+  day=day||sel; /* 疗程项按"那天"的日期判断是否在窗口内，补打卡/7天总结才不会算错 */
+  const tr=TREATMENT.filter(x=>day>=x.start&&day<=x.end);
+  return tr.concat(UNIVERSAL).concat(SHIFT_ITEMS[sh]);
+}
 
 function render(){
   const t=todayStr();
@@ -554,7 +567,7 @@ function render(){
   /* 清单 */
   const sh=shiftOf(sel);
   document.getElementById('listDate').textContent=sel.slice(5)+' '+SHIFT_NAME[sh];
-  const items=itemsFor(sh), r=store.days[sel];
+  const items=itemsFor(sh, sel), r=store.days[sel];
   let done=0;
   document.getElementById('checklist').innerHTML=items.map(it=>{
     const st=r&&r.items[it.id];
@@ -585,7 +598,7 @@ function render(){
   /* 近7天 */
   const days=[...Array(7)].map((_,i)=>addDays(t,i-6));
   document.getElementById('strip').innerHTML=days.map(d=>{
-    const dd=store.days[d], s=shiftOf(d), its=itemsFor(s);
+    const dd=store.days[d], s=shiftOf(d), its=itemsFor(s,d);
     let doneC=0,missC=0;
     if(dd)its.forEach(it=>{if(dd.items[it.id]==='done')doneC++;else if(dd.items[it.id]==='miss')missC++;});
     let rs='–',sub='',col='';
@@ -651,7 +664,7 @@ cl.addEventListener('contextmenu',e=>{
 let noteTarget=null;
 function openNote(id){
   noteTarget=id;
-  const items=itemsFor(shiftOf(sel)), it=items.find(x=>x.id===id);
+  const items=itemsFor(shiftOf(sel), sel), it=items.find(x=>x.id===id);
   document.getElementById('noteTitle').textContent='📝 备注 · '+it.name;
   document.getElementById('noteSub').textContent=sel+' '+SHIFT_NAME[shiftOf(sel)]+' · 记录具体做了多少';
   document.getElementById('noteText').value=noteOf(sel,id);
@@ -692,7 +705,7 @@ function renderReview(){
   const d=lastRecordedDay();
   if(!d||store.reviewSeen===t){ card.classList.add('hidden'); return; }
   card.classList.remove('hidden');
-  const dd=store.days[d], sh=shiftOf(d), items=itemsFor(sh);
+  const dd=store.days[d], sh=shiftOf(d), items=itemsFor(sh,d);
   let done=0,miss=0;
   const rows=items.map(it=>{
     const st=dd.items[it.id];
@@ -719,7 +732,7 @@ function renderHistory(){
     document.getElementById('historyList').innerHTML=
       '<span class="sub">还没有记录，今天打完卡这里就会出现第一条</span>'; return; }
   document.getElementById('historyList').innerHTML=ds.slice(0,31).map(d=>{
-    const dd=store.days[d], sh=shiftOf(d), items=itemsFor(sh);
+    const dd=store.days[d], sh=shiftOf(d), items=itemsFor(sh,d);
     let done=0; items.forEach(it=>{ if(dd.items[it.id]==='done')done++; });
     const rows=items.map(it=>revRow(d,it,dd.items[it.id])).join('');
     return `<details class="hist"><summary>
@@ -740,11 +753,11 @@ function buildSummaryData(){
     const dd=store.days[d];
     if(!dd||Object.keys(dd.items).length===0){untracked++;
       /* 没记录的天也计入分母：没打卡 = 当天全部事项未完成，否则完成率会虚高 */
-      itemsFor(shiftOf(d)).forEach(it=>{
+      itemsFor(shiftOf(d),d).forEach(it=>{
         const q=per[it.id]||(per[it.id]={id:it.id,name:it.name,unit:it.unit||'次',app:0,done:0,miss:0,notes:[]});
         q.app++; q.miss++; totalA++; });
       return; }
-    itemsFor(shiftOf(d)).forEach(it=>{
+    itemsFor(shiftOf(d),d).forEach(it=>{
       const p=per[it.id]||(per[it.id]={id:it.id,name:it.name,unit:it.unit||'次',app:0,done:0,miss:0,notes:[]});
       p.app++; totalA++;
       if(dd.items[it.id]==='done'){p.done++;totalD++;}else p.miss++;
