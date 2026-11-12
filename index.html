@@ -152,6 +152,20 @@ details.hist .hd .revline { padding:3px 0; font-size:13px; }
   font-size:13px; opacity:0; pointer-events:none; transition:opacity .25s; z-index:60;
   max-width:80vw; }
 .toast.show { opacity:.95; }
+/* 周报弹窗 */
+#wkOverlay { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex;
+  align-items:center; justify-content:center; z-index:55; padding:16px; }
+#wkOverlay .mcard { max-width:520px; max-height:86vh; overflow:auto; }
+.wk-hero { display:flex; align-items:baseline; gap:10px; margin:4px 0 2px; }
+.wk-sec { margin-top:12px; }
+.wk-sec h4 { margin:0 0 6px; font-size:13.5px; color:var(--ink2); }
+.wk-list { margin:0; padding-left:20px; font-size:13.5px; line-height:1.7; }
+.wk-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.wk-chips span { border:1px solid var(--border); border-radius:999px; padding:4px 10px;
+  font-size:12.5px; line-height:1.5; }
+.wk-chips span.ok { color:var(--good-text); border-color:var(--good); }
+.wk-chips span.no { color:var(--bad); border-color:var(--bad); }
+.wk-sub { font-size:12.5px; color:var(--muted); }
 </style>
 </head>
 <body>
@@ -202,6 +216,7 @@ details.hist .hd .revline { padding:3px 0; font-size:13px; }
       <button class="btn primary" onclick="genSummary(true)">生成 / 刷新总结</button>
       <button class="btn" onclick="copySummary()">复制给 Claude</button>
       <button class="btn" onclick="downloadSummary()">下载 .md</button>
+      <button class="btn" onclick="openWeekly()">📋 上周周报</button>
     </div>
   </div>
 
@@ -256,6 +271,16 @@ details.hist .hd .revline { padding:3px 0; font-size:13px; }
       <button class="btn del" onclick="clearNote()">删除备注</button>
       <button class="btn" onclick="closeNote()">取消</button>
       <button class="btn primary" onclick="saveNote()">保存</button>
+    </div>
+  </div>
+</div>
+<!-- 周报弹窗（每周自动弹一次） -->
+<div id="wkOverlay" class="hidden" onclick="if(event.target===this)closeWeekly()">
+  <div class="mcard">
+    <div id="wkBody"></div>
+    <div class="mrow">
+      <button class="btn" onclick="copyWeekly()">复制周报</button>
+      <button class="btn primary" onclick="closeWeekly()">开始今天打卡</button>
     </div>
   </div>
 </div>
@@ -530,6 +555,132 @@ const TIPS={
  rxRox:'固定时间空腹服吸收更好，胃不舒服改饭后；吃满14天就停，别自行延长', nsRinse:'先洗鼻后喷药，水温接近体温，早晚各一次',
  bude:'喷嘴朝外侧鼻孔壁，别对着鼻中隔；喷完轻吸气别猛吸',
 };
+
+/* ============ 每周周报（自然周一~周日 · 进入新一周首次打开自动弹 · 查漏补缺+下周重点+该做/不该做） ============ */
+const DO_BASE=[
+ '维D 随餐吃 800~1000 IU（骨量刚需）',
+ '奶/酸奶 300~500ml（补钙主渠道）',
+ '白天主动喝水，别等渴',
+ '每周抗阻 2~3 次 + 乒乓球（胰岛素/骨量/腰三重收益）',
+ '休班日 10:00~15:00 晒太阳 20~30 分钟'];
+const DONT_BASE=[
+ '夜班 03:00–05:00 泡面/含糖饮料/精制碳水（胰岛素红线）',
+ '02:00 后咖啡因（睡眠+骨钙+胃三重理由）',
+ '下夜班恢复日饮酒（毁深度睡眠还刺激胃）',
+ '躺床刷手机（睡眠/腰/骨三连击）',
+ '报复性补觉超模板（越睡越乱）'];
+let weeklyMd='';
+function prevMonday(){ return addDays(mondayOf(todayStr()),-7); }
+function buildWeekly(mon){
+  const t=todayStr(), days=[...Array(7)].map((_,i)=>addDays(mon,i));
+  const per={}; let totalA=0,totalD=0,untracked=0; const noteLog=[];
+  days.forEach(d=>{
+    const dd=store.days[d], its=itemsFor(shiftOf(d),d);
+    if(!dd||Object.keys(dd.items).length===0){ untracked++;
+      its.forEach(it=>{ const q=per[it.id]||(per[it.id]={id:it.id,name:it.name,app:0,done:0,miss:0,notes:[]});
+        q.app++; q.miss++; totalA++; });
+      return; }
+    its.forEach(it=>{
+      const q=per[it.id]||(per[it.id]={id:it.id,name:it.name,app:0,done:0,miss:0,notes:[]});
+      q.app++; totalA++;
+      if(dd.items[it.id]==='done'){ q.done++; totalD++; } else q.miss++;
+      const nt=dd.notes?dd.notes[it.id]:'';
+      if(nt){ const neg=/没|未|不|忘|错过|漏/.test(nt);
+        q.notes.push({d:d.slice(5),text:nt,neg});
+        noteLog.push({d:d.slice(5),name:it.name,text:nt,neg}); }
+    });
+  });
+  const rate=totalA?Math.round(totalD/totalA*100):0;
+  const rows=Object.values(per).map(p=>({ id:p.id, name:p.name, app:p.app, done:p.done,
+      rate:p.app?Math.round(p.done/p.app*100):0, notes:p.notes }))
+    .map(r=>{ r.v=r.rate>=85?'👍 稳':r.rate>=50?'⚠️ 不稳':'❌ 掉队'; return r; })
+    .sort((a,b)=>a.rate-b.rate);
+  const stable=rows.filter(r=>r.rate>=85&&r.app>0);
+  const miss=rows.filter(r=>r.rate<85);
+  const wex=store.weeks[mon]||{};
+  let focus=[];
+  WEEKLY.forEach(x=>{ const v=wex[x.id]||0;
+    if(v<x.target) focus.push(x.name+' 上周 '+v+'/'+x.target+' → '+TIPS[x.id]); });
+  miss.slice(0,4).forEach(r=>focus.push(r.name+'（'+r.rate+'%）→ '+(TIPS[r.id]||'先保证隔天做一次')));
+  if(!focus.length) focus.push('上周全绿 ✅ 保持现节奏，可挑战把薄弱项提到 90%+');
+  if(focus.length>6) focus=focus.slice(0,6);
+  const sig=noteLog.filter(n=>n.neg).map(n=>'⚠️ '+n.d+' '+n.name+'：「'+n.text+'」');
+  const dueR=REMINDERS.filter(rm=>diffDays(t,rm.due)<=45);
+  const L=[];
+  L.push('# 📋 上周周报（'+mon+' ~ '+days[6]+'）');
+  L.push('');
+  L.push('**总完成率：'+rate+'%**（记录 '+(7-untracked)+'/7 天'+(untracked?'，'+untracked+' 天未打卡':'')+'）');
+  L.push('');
+  L.push('| 事项 | 做了/适用 | 完成率 | 判定 | 备注 |');
+  L.push('|---|---|---|---|---|');
+  rows.forEach(r=>L.push('| '+r.name+' | '+r.done+'/'+r.app+' | '+r.rate+'% | '+r.v+' | '+(r.notes.length?r.notes.length+' 条':'—')+' |'));
+  L.push('');
+  L.push('**上周运动**：'+WEEKLY.map(x=>x.name+' '+(wex[x.id]||0)+'/'+x.target).join(' · '));
+  L.push('');
+  if(miss.length){ L.push('**🔴 查漏补缺（上周漏掉的）**：');
+    miss.forEach(r=>L.push('- '+r.name+' '+r.rate+'%（'+r.done+'/'+r.app+'）→ 补法：'+(TIPS[r.id]||'先保证隔天做一次')));
+    L.push(''); }
+  L.push('**🎯 下周重点**：');
+  focus.forEach((f,i)=>L.push((i+1)+'. '+f));
+  L.push('');
+  L.push('**✅ 该做（每周基线）**：'+DO_BASE.join('；'));
+  L.push('**❌ 不该做（红线）**：'+DONT_BASE.join('；'));
+  if(sig.length){ L.push(''); L.push('**📝 上周备注信号**：'); sig.forEach(s=>L.push('- '+s.replace(/\|/g,'／'))); }
+  if(dueR.length){ L.push(''); L.push('**复查提醒**：'+dueR.map(rm=>rm.name+'（'+rm.due+'，剩 '+Math.max(0,diffDays(t,rm.due))+' 天）').join(' · ')); }
+  L.push(''); L.push('*规则依据：D:\Life日志\健康管理档案.md · 周报：健康管理打卡 App*');
+  const md=L.join('\n');
+  const html=
+   '<h3>📋 上周周报（'+mon.slice(5)+' ~ '+days[6].slice(5)+'）</h3>'
+   +'<div class="wk-hero"><span class="hero" style="font-size:38px">'+rate+'</span>'
+   +'<span class="wk-sub">总完成率 · 记录 '+(7-untracked)+'/7 天'+(untracked?'（'+untracked+' 天没打卡）':'')+'</span></div>'
+   +'<div class="wk-sec"><h4>'+(miss.length?'🔴 查漏补缺 —— 上周漏掉的':'✅ 查漏补缺')+'</h4>'
+   +(miss.length
+     ?'<ul class="wk-list">'+miss.map(r=>'<li><b>'+esc(r.name)+'</b> '+r.rate+'%（'+r.done+'/'+r.app+'）<br>'
+       +'<span class="wk-sub">补法：'+esc(TIPS[r.id]||'先保证隔天做一次')+'</span></li>').join('')+'</ul>'
+     :'<div class="wk-sub">没有明显掉队项，干得漂亮 👍</div>')
+   +'</div>'
+   +'<div class="wk-sec"><h4>🎯 下周重点（就做这几件）</h4><ol class="wk-list">'
+   +focus.map(f=>'<li>'+esc(f)+'</li>').join('')+'</ol></div>'
+   +'<div class="wk-sec"><h4>✅ 该做（每周基线）</h4><div class="wk-chips">'
+   +DO_BASE.map(s=>'<span class="ok">'+esc(s)+'</span>').join('')+'</div></div>'
+   +'<div class="wk-sec"><h4>❌ 不该做（红线）</h4><div class="wk-chips">'
+   +DONT_BASE.map(s=>'<span class="no">'+esc(s)+'</span>').join('')+'</div></div>'
+   +(stable.length?'<div class="wk-sec"><h4>💪 上周做稳的（≥85%）</h4><div class="wk-chips">'
+     +stable.map(r=>'<span class="ok">'+esc(r.name)+' '+r.rate+'%</span>').join('')+'</div></div>':'')
+   +(sig.length?'<div class="wk-sec"><h4>📝 备注信号</h4><ul class="wk-list">'
+     +sig.map(s=>'<li>'+esc(s)+'</li>').join('')+'</ul></div>':'')
+   +(dueR.length?'<div class="wk-sec"><h4>⏰ 复查提醒</h4><div class="wk-sub">'
+     +esc(dueR.map(rm=>rm.name+'：'+rm.due+'（剩 '+Math.max(0,diffDays(t,rm.due))+' 天）').join(' · '))+'</div></div>':'');
+  return { md, html, rows, rate };
+}
+function maybeWeeklyAuto(){
+  const wk=mondayOf(todayStr());
+  if(store.weeklySeen===wk) return;
+  store.weeklySeen=wk; save();
+  if(!Object.keys(store.days).length) return;
+  openWeekly();
+}
+function openWeekly(){
+  const rep=buildWeekly(prevMonday());
+  weeklyMd=rep.md;
+  document.getElementById('wkBody').innerHTML=rep.html;
+  document.getElementById('wkOverlay').classList.remove('hidden');
+}
+function closeWeekly(){ document.getElementById('wkOverlay').classList.add('hidden'); }
+function copyWeekly(){
+  if(!weeklyMd){ openWeekly(); return; }
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(weeklyMd).then(()=>toast('周报已复制 ✓'),()=>fallbackWeeklyCopy());
+  else fallbackWeeklyCopy();
+}
+function fallbackWeeklyCopy(){
+  const ta=document.createElement('textarea'); ta.value=weeklyMd;
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); toast('周报已复制 ✓'); }
+  catch(e){ toast('复制失败'); }
+  document.body.removeChild(ta);
+}
+
 
 /* ============ 渲染 ============ */
 function itemsFor(sh, day){
@@ -891,6 +1042,7 @@ document.getElementById('themeBtn').onclick=()=>{
   localStorage.setItem(LS+'.theme',theme); applyTheme();
 };
 applyTheme(); render(); pull(); initCloudCard();
+setTimeout(maybeWeeklyAuto,900);
 </script>
 </body>
 </html>
